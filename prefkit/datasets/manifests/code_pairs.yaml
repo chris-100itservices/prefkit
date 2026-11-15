@@ -1,0 +1,29 @@
+# Template for a code-preference set. Each row holds a problem, two candidate solutions,
+# the annotator's pick, and unit tests. Replace the location, card, license and field
+# names with the real dataset's values. Until then, `ingest code_pairs` will fail with a
+# clear "file not found" error, which is the intended behaviour for a template.
+name: code_pairs
+version: 1
+
+source:
+  type: local
+  location: data/code_pairs.jsonl
+
+card: https://example.org/code-pairs-card   # placeholder
+license: cc-by-4.0                          # placeholder; verify
+
+mapping:
+  prompt_strategy: field
+  prompt_field: problem
+  response_a_field: solution_a
+  response_b_field: solution_b
+  winner_field: preferred
+  winner_map:              # quoted so YAML keeps the keys as strings
+    "1": a
+    "2": b
+    "tie": tie
+  shuffle_positions: true
+
+gold:
+  kind: execution          # a solution is "correct" if it passes the tests
+  field: unit_tests

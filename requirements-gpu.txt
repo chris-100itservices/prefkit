@@ -1,0 +1,8 @@
+# Local GPU support. Install torch first with the wheel matching your CUDA version
+# from https://pytorch.org, for example:
+#   pip install torch --index-url https://download.pytorch.org/whl/cu121
+# then install this file. bitsandbytes (4-bit loading) needs an NVIDIA GPU.
+-r requirements.txt
+transformers>=4.44
+accelerate>=0.33
+bitsandbytes>=0.43; sys_platform == "linux" or sys_platform == "win32"

@@ -1,0 +1,24 @@
+# HH-RLHF: human preference pairs on helpfulness and harmlessness.
+# Each row has "chosen" and "rejected": two full conversations that share leading turns.
+# The adapter extracts the shared turns as the prompt.
+name: hh_rlhf
+version: 1
+
+source:
+  type: hf
+  location: Anthropic/hh-rlhf
+  split: train
+
+# Check the license on the dataset card before relying on it.
+card: https://huggingface.co/datasets/Anthropic/hh-rlhf
+license: mit
+
+mapping:
+  prompt_strategy: common_prefix
+  response_a_field: chosen
+  response_b_field: rejected
+  winner_fixed: a          # "chosen" is always the preferred response
+  shuffle_positions: true
+
+gold:
+  kind: none               # no known-correct answers; the game uses agreement scoring

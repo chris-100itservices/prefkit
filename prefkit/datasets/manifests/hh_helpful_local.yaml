@@ -1,0 +1,23 @@
+# HH-RLHF, helpfulness subset, read from the local download.
+# Same mapping as hh_rlhf; only the source differs.
+name: hh_helpful_local
+version: 1
+
+source:
+  type: local
+  location: data/hh-rlhf/helpful-base/train.jsonl.gz
+
+card: https://huggingface.co/datasets/Anthropic/hh-rlhf
+license: mit # confirm on the dataset card before relying on it
+
+mapping:
+  prompt_strategy: common_prefix
+  response_a_field: chosen
+  response_b_field: rejected
+  winner_fixed: a
+  shuffle_positions: true
+
+gold:
+  kind: none
+
+max_quarantine_rate: 0.01

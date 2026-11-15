@@ -1,0 +1,55 @@
+{% load static %}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ dataset.name }} · prefkit</title>
+</head>
+<body>
+  <h1>{{ dataset.name }}</h1>
+  {% csrf_token %}
+
+  <button id="start" data-url="{% url 'prefkit:start-ingest' dataset.name %}">Ingest dataset</button>
+  <p id="status" aria-live="polite">Idle.</p>
+
+  <h2>Recent jobs</h2>
+  <ul>
+    {% for job in jobs %}
+      <li>{{ job.created_at }}: {{ job.status }}, {{ job.accepted }} accepted, {{ job.quarantined }} quarantined{% if job.error %} ({{ job.error }}){% endif %}</li>
+    {% empty %}
+      <li>No jobs yet.</li>
+    {% endfor %}
+  </ul>
+
+  <script type="module">
+    import { startIngest, watchJob } from "{% static 'prefkit/ingest.js' %}";
+
+    const button = document.getElementById("start");
+    const status = document.getElementById("status");
+    let stopWatching = null;
+
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+      try {
+        const { status_url } = await startIngest(button.dataset.url);
+        status.textContent = "Queued.";
+        stopWatching?.();
+        stopWatching = watchJob(status_url, {
+          onUpdate(job) {
+            const live = job.live ?? { accepted: job.accepted, quarantined: job.quarantined };
+            status.textContent = `${job.status}: ${live.accepted} accepted, ${live.quarantined} quarantined`;
+            if (job.finished) {
+              button.disabled = false;
+              if (job.error) status.textContent += ` (${job.error})`;
+            }
+          },
+          onError: (err) => (status.textContent = `Connection problem, retrying: ${err.message}`),
+        });
+      } catch (err) {
+        status.textContent = err.message; // a 409 lands here with a readable message
+        button.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

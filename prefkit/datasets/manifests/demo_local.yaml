@@ -1,0 +1,29 @@
+# A small project-owned sample, shipped so the whole pipeline runs offline.
+# It has one deliberately broken row, so you can watch quarantine work in a debugger.
+name: demo_local
+version: 1
+
+source:
+  type: local
+  location: data/demo_local.jsonl
+
+card: https://example.org/demo-local-card   # this sample is written for prefkit tests
+license: cc0-1.0
+
+mapping:
+  prompt_strategy: field
+  prompt_field: prompt
+  response_a_field: a
+  response_b_field: b
+  winner_field: preferred
+  winner_map:
+    "1": a
+    "2": b
+    "tie": tie
+  shuffle_positions: true
+
+gold:
+  kind: none
+
+# One bad row out of 13 is about 7.7%, so the limit is raised for this demo only.
+max_quarantine_rate: 0.10

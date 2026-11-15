@@ -1,0 +1,7 @@
+# Core runtime. Installs on any machine, with no GPU required.
+Django>=5.0,<6.0
+celery>=5.4
+redis>=5.0
+pydantic>=2.6
+PyYAML>=6.0
+datasets>=2.19

@@ -1,0 +1,13 @@
+{"id": "d01", "prompt": "What is the boiling point of water at sea level?", "a": "It boils at 100 degrees Celsius at sea level.", "b": "About 50 degrees Celsius.", "preferred": "1"}
+{"id": "d02", "prompt": "Name a prime number greater than 10.", "a": "11 is prime.", "b": "12 is prime.", "preferred": "1"}
+{"id": "d03", "prompt": "How do I reverse a list in Python?", "a": "Use my_list[::-1] or my_list.reverse() to reverse in place.", "b": "Lists cannot be reversed.", "preferred": "1"}
+{"id": "d04", "prompt": "What gas do plants absorb for photosynthesis?", "a": "They absorb carbon dioxide.", "b": "They absorb oxygen.", "preferred": "1"}
+{"id": "d05", "prompt": "Is the Earth flat?", "a": "No. The Earth is an oblate spheroid.", "b": "Yes, it is flat.", "preferred": "1"}
+{"id": "d06", "prompt": "Give one reason to use version control.", "a": "It records history so changes can be reviewed and undone.", "b": "It makes computers faster.", "preferred": "1"}
+{"id": "d07", "prompt": "What does HTTP status 404 mean?", "a": "The requested resource was not found.", "b": "The server is on fire.", "preferred": "1"}
+{"id": "d08", "prompt": "Which is larger, 3 or 7?", "a": "3 is larger.", "b": "7 is larger.", "preferred": "2"}
+{"id": "d09", "prompt": "What is a hash function?", "a": "A function that maps input of any size to a fixed-size value.", "b": "A kind of bread.", "preferred": "1"}
+{"id": "d10", "prompt": "Should I back up my data?", "a": "Yes, keep at least two copies in different places.", "b": "No backups are needed.", "preferred": "1"}
+{"id": "d11", "prompt": "Explain recursion in one sentence.", "a": "A function that calls itself on a smaller version of the same problem.", "b": "Recursion is repetition of letters.", "preferred": "1"}
+{"id": "d12", "prompt": "Are both answers equally good? Both say 4.", "a": "2 plus 2 is 4.", "b": "2 plus 2 is 4.", "preferred": "tie"}
+{"id": "d13", "prompt": "This row has an invalid preference value.", "a": "Some answer.", "b": "Another answer.", "preferred": "9"}
