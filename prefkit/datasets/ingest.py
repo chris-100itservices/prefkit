@@ -115,7 +115,7 @@ def source_reader(kind: str) -> Callable[[SourceFn], SourceFn]:
 
 @source_reader("hf")
 def _read_hub(manifest: Manifest) -> Iterable[Mapping[str, Any]]:
-    """Stream rows from the Hugging Face Hub. Imported lazily, so local runs do not need it."""
+    # Imported here, so local-only runs and the test suite do not need the package.
     from datasets import load_dataset
 
     rows = load_dataset(
@@ -128,20 +128,23 @@ def _read_hub(manifest: Manifest) -> Iterable[Mapping[str, Any]]:
     return cast(Iterable[Mapping[str, Any]], rows)
 
 
+def _open_text(path: Path) -> Any:
+    """Open a text file for reading. A name ending in .gz is decompressed while it is read."""
+    if path.suffix == ".gz":
+        return gzip.open(path, "rt", encoding="utf-8")
+    return path.open(encoding="utf-8")
+
+
 @source_reader("local")
 def _read_jsonl(manifest: Manifest) -> Iterator[Mapping[str, Any]]:
-    """Yield rows from a JSON Lines file. Files ending in .gz are decompressed on the fly."""
     path = Path(manifest.source.location)
     if not path.is_absolute():
         path = PROJECT_ROOT / path
-
-    opener = gzip.open if path.suffix == ".gz" else open
+    # A missing or malformed file is a file-level problem, not a row-level one, so it aborts.
     try:
-        handle_ctx = opener(path, "rt", encoding="utf-8")
+        handle_ctx = _open_text(path)
     except FileNotFoundError as exc:
         raise AbortIngest(f"data file not found: {path}") from exc
-
-    # A malformed file is a file-level problem, not a row-level one, so it aborts the run.
     with handle_ctx as handle:
         for line_number, line in enumerate(handle, start=1):
             if not line.strip():
@@ -197,11 +200,13 @@ def _extract_common_prefix(row: Mapping[str, Any], spec: MappingSpec) -> tuple[s
     The shared turns become the prompt. The first differing turn starts each response,
     and it must be an assistant turn.
     """
-    chosen = _split_turns(_text(row, spec.response_a_field))
-    rejected = _split_turns(_text(row, spec.response_b_field))
-    
-    if chosen == rejected:
+    a_raw = _text(row, spec.response_a_field)
+    b_raw = _text(row, spec.response_b_field)
+    if a_raw == b_raw:
         raise RowError("chosen and rejected are identical, so there is no preference")
+
+    chosen = _split_turns(a_raw)
+    rejected = _split_turns(b_raw)
 
     shared = 0
     for a_turn, b_turn in zip(chosen, rejected, strict=False):
@@ -323,7 +328,7 @@ def map_row(row: Mapping[str, Any], manifest: Manifest) -> Mapped:
         b_id=b.id,
         winner=winner,
         gold=_is_gold(row, manifest),
-        source="human",
+        source=manifest.judged_by,
     )
     return Mapped(
         prompt=Prompt(id=prompt_id, text=prompt_text),
@@ -406,3 +411,7 @@ class IngestRun:
             f"({self.quarantine_rate:.1%}), above the limit of {limit:.1%}. "
             f"Most common reason ({count} rows): {top_reason}"
         )
+
+
+# Imported last: the module registers its readers with the decorators above.
+from prefkit.datasets import pair_sources  # noqa: E402,F401

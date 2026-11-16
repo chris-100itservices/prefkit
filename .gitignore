@@ -8,3 +8,5 @@ build/
 .ruff_cache/
 *.sqlite3
 data/hh-rlhf/
+docs/.~lock*
+docs/prefkit-project.zip

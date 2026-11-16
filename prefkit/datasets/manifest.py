@@ -28,7 +28,16 @@ class StrictModel(BaseModel):
 
 
 class SourceSpec(StrictModel):
-    type: Literal["hf", "local"]
+    # hf and local read rows as they are stored. The other kinds turn a public dataset
+    # into {"prompt", "reply_a", "reply_b"} rows (see pair_sources.py).
+    type: Literal[
+        "hf",
+        "local",
+        "humaneval_mutants",
+        "mbpp_mutants",
+        "oasst_tree",
+        "ultrafeedback_best_worst",
+    ]
     location: str = Field(min_length=1)  # Hub id for "hf", file path for "local"
     split: str | None = None  # required for "hf"
 
@@ -114,6 +123,10 @@ class Manifest(StrictModel):
     # If more than this share of rows fail during ingest, the run aborts. This catches a
     # wrong mapping, which would otherwise quarantine everything and report success.
     max_quarantine_rate: float = Field(default=0.01, ge=0.0, le=1.0)
+
+    # Who made the judgement, recorded on every comparison. "execution" means tests decided,
+    # "judge" means a model decided, and "human" means a person decided.
+    judged_by: Literal["human", "judge", "execution"] = "human"
 
 
 def load_manifest(path: Path) -> Manifest:
