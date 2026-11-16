@@ -1,0 +1,26 @@
+# OpenAI HumanEval: 164 Python problems. Each correct solution is paired with a broken
+# variant of itself. The correct one passes the tests and the broken one does not.
+name: humaneval
+version: 1
+
+source:
+  type: humaneval_mutants
+  location: openai/openai_humaneval
+  split: test
+
+card: https://huggingface.co/datasets/openai/openai_humaneval
+license: mit
+
+mapping:
+  prompt_strategy: field
+  prompt_field: prompt
+  response_a_field: reply_a
+  response_b_field: reply_b
+  winner_fixed: a          # the reply that passes its tests is always first
+  shuffle_positions: true
+
+# The tests decide which reply is correct.
+judged_by: execution
+
+gold:
+  kind: none

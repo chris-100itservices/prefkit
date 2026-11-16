@@ -1,0 +1,26 @@
+# MBPP: about 1,000 short Python problems with tests. Each correct solution is paired with
+# a broken variant of itself, as in humaneval.yaml. Uses the "full" configuration.
+name: mbpp
+version: 1
+
+source:
+  type: mbpp_mutants
+  location: google-research-datasets/mbpp
+  split: train
+
+card: https://huggingface.co/datasets/google-research-datasets/mbpp
+license: cc-by-4.0
+
+mapping:
+  prompt_strategy: field
+  prompt_field: prompt
+  response_a_field: reply_a
+  response_b_field: reply_b
+  winner_fixed: a
+  shuffle_positions: true
+
+# The tests decide which reply is correct.
+judged_by: execution
+
+gold:
+  kind: none

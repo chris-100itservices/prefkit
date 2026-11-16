@@ -1,0 +1,28 @@
+# Stanford SHP: Reddit posts with two human-written comments and which one people preferred.
+# The label is 1 when comment A is preferred and 0 when comment B is preferred.
+name: shp
+version: 1
+
+source:
+  type: hf
+  location: stanfordnlp/SHP
+  split: train
+
+# Not an open licence: the card places the data under the Reddit API Terms of Use,
+# and states that the licence may be changed or revoked. Check it before publishing.
+card: https://huggingface.co/datasets/stanfordnlp/SHP
+license: "Custom: Reddit API Terms of Use (see card; not an open licence)"
+
+mapping:
+  prompt_strategy: field
+  prompt_field: history          # the Reddit post
+  response_a_field: human_ref_A  # the first comment
+  response_b_field: human_ref_B  # the second comment
+  winner_field: labels
+  winner_map:
+    "1": a
+    "0": b
+  shuffle_positions: true
+
+gold:
+  kind: none

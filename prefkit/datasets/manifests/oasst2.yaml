@@ -1,0 +1,23 @@
+# OpenAssistant oasst2: replies to the same prompt are ranked. The two best replies to each
+# prompt form one pair, and rank 0 is treated as the best reply.
+name: oasst2
+version: 1
+
+source:
+  type: oasst_tree
+  location: OpenAssistant/oasst2
+  split: train
+
+card: https://huggingface.co/datasets/OpenAssistant/oasst2
+license: apache-2.0
+
+mapping:
+  prompt_strategy: field
+  prompt_field: prompt
+  response_a_field: reply_a
+  response_b_field: reply_b
+  winner_fixed: a
+  shuffle_positions: true
+
+gold:
+  kind: none

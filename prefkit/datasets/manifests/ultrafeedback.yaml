@@ -1,0 +1,26 @@
+# UltraFeedback: each prompt has four model answers, each rated. The highest-rated answer
+# is paired with the lowest-rated one, on the helpfulness rating.
+name: ultrafeedback
+version: 1
+
+source:
+  type: ultrafeedback_best_worst
+  location: openbmb/UltraFeedback
+  split: train
+
+card: https://huggingface.co/datasets/openbmb/UltraFeedback
+license: mit
+
+mapping:
+  prompt_strategy: field
+  prompt_field: prompt
+  response_a_field: reply_a
+  response_b_field: reply_b
+  winner_fixed: a
+  shuffle_positions: true
+
+# The ratings were produced by GPT-4, according to the dataset card.
+judged_by: judge
+
+gold:
+  kind: none
