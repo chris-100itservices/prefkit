@@ -1,0 +1,204 @@
+{% load static %}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>prefkit · datasets</title>
+  <style>
+    /* Both rows of dataset buttons share one look. */
+    .button-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 16px; }
+    .btn {
+      display: inline-block; padding: 4px 12px; font: 15px system-ui, sans-serif; line-height: 1.4;
+      color: #111; background: #f0f0f0; border: 1px solid #8a8a8a; border-radius: 4px;
+      text-decoration: none; cursor: pointer;
+    }
+    .btn:hover, .btn:focus-visible { background: #e2e2e2; }
+    .btn:disabled { color: #999; background: #f6f6f6; border-color: #ccc; cursor: not-allowed; }
+    /* Green outline: the data is there and the button can be used now. The thicker border
+       takes 1px more on each side, so the padding is 1px smaller to keep every button the same size. */
+    .btn.ready { border: 2px solid #2e7d32; padding: 3px 11px; }
+    .btn.ready:disabled { border-color: #a5c9a8; }
+    .btn .optional { margin-left: 4px; font-size: 12px; font-style: italic; color: #666; }
+    .tip .status { display: block; margin-top: 4px; }
+    .legend { font-size: 14px; color: #444; }
+
+    /* The help box: hidden until the pointer rests on the button, or the button has keyboard focus. */
+    .tip-wrap { position: relative; display: inline-block; }
+    .tip {
+      display: none; position: absolute; top: calc(100% + 6px); left: 0; z-index: 10;
+      width: max-content; max-width: min(320px, 90vw); padding: 8px 10px;
+      font: 13px/1.45 system-ui, sans-serif; color: #222; background: #fff;
+      border: 1px solid #bbb; border-radius: 6px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      pointer-events: none; /* never blocks the buttons underneath, and closes when the pointer leaves */
+    }
+    .tip strong { display: block; margin-bottom: 2px; }
+    .tip .action { display: block; margin-top: 4px; color: #555; font-style: italic; }
+    .tip-wrap:hover .tip, .tip-wrap:focus-within .tip { display: block; }
+  </style>
+</head>
+<body>
+  <p>
+    Signed in as <strong>{{ user.get_username }}</strong>{% if user.is_staff %} (administrator){% endif %}
+    · <a href="{% url 'password_change' %}">Change password</a>
+  </p>
+  <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button type="submit">Sign out</button></form>
+
+  <h1>Datasets</h1>
+
+  {% if user.is_staff %}
+    <p>Press a button to import that dataset. Only one import runs at a time, so all the buttons are greyed out while one is running.</p>
+    <p class="legend">A green outline means the dataset's data is available and it can be imported now.</p>
+
+    <div class="button-row">
+      {% for ds in datasets %}
+        <span class="tip-wrap">
+          <button type="button" class="start btn{% if ds.ready %} ready{% endif %}" data-name="{{ ds.name }}" data-url="{% url 'prefkit:start-ingest' ds.name %}" aria-describedby="tip-import-{{ ds.name }}"{% if active %} disabled{% endif %}>{{ ds.name }}{% if ds.optional %}<span class="optional">optional</span>{% endif %}</button>
+          <span class="tip" role="tooltip" id="tip-import-{{ ds.name }}">
+            <strong>{{ ds.title }}{% if ds.optional %} (optional){% endif %}</strong>
+            {{ ds.description }}
+            <span class="status">{{ ds.status }}</span>
+            <span class="action">Press to import this dataset.</span>
+          </span>
+        </span>
+      {% empty %}
+        <p>No datasets are registered yet. Run <code>python manage.py sync_datasets</code>.</p>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p>Only an administrator can import datasets. You can label rows below.</p>
+  {% endif %}
+
+  <h2>Label rows</h2>
+  <p>Rows that the router sends to a person are labelled here, one dataset at a time.</p>
+  <p class="legend">A green outline means rows are waiting for you to label. <a href="{% url 'prefkit:leaderboard' %}">See the leaderboard.</a></p>
+  <div class="button-row">
+    {% for ds in datasets %}
+      <span class="tip-wrap">
+        <a class="btn{% if ds.waiting %} ready{% endif %}" href="{% url 'prefkit:label' ds.name %}" aria-describedby="tip-label-{{ ds.name }}">{{ ds.name }}{% if ds.optional %}<span class="optional">optional</span>{% endif %}</a>
+        <span class="tip" role="tooltip" id="tip-label-{{ ds.name }}">
+          <strong>{{ ds.title }}{% if ds.optional %} (optional){% endif %}</strong>
+          {{ ds.description }}
+          <span class="action">{% if ds.waiting %}Press to label: {{ ds.waiting }} row{{ ds.waiting|pluralize }} wait{{ ds.waiting|pluralize:"s," }} for you.{% elif ds.routed %}You have labelled all {{ ds.routed }} row{{ ds.routed|pluralize }} sent to a person.{% else %}No rows of this dataset are sent to a person yet. An administrator sends them with route --apply.{% endif %}</span>
+        </span>
+      </span>
+    {% endfor %}
+  </div>
+
+  <script>
+    // A help box near the edge of the window would be cut off. When the box opens, measure
+    // it and move it left by exactly as much as it sticks out, keeping an 8-pixel margin.
+    const MARGIN = 8;
+    document.querySelectorAll(".tip-wrap").forEach((wrap) => {
+      const place = () => {
+        const tip = wrap.querySelector(".tip");
+        tip.style.left = "0";
+        requestAnimationFrame(() => {
+          const box = tip.getBoundingClientRect();
+          const tooFarRight = box.right - (document.documentElement.clientWidth - MARGIN);
+          const roomOnLeft = box.left - MARGIN;
+          const shift = Math.max(0, Math.min(tooFarRight, roomOnLeft));
+          tip.style.left = `${-shift}px`;
+        });
+      };
+      wrap.addEventListener("mouseenter", place);
+      wrap.addEventListener("focusin", place);
+    });
+  </script>
+
+  <h2>Running now</h2>
+  <p id="progress" aria-live="polite">{% if active %}{{ active.dataset }} is running.{% else %}Nothing is running.{% endif %}</p>
+  {% if user.is_staff %}
+    <button type="button" id="cancel" data-url="{% if active %}{{ active.cancel_url }}{% endif %}"{% if not active %} hidden{% endif %}>Cancel import</button>
+  {% endif %}
+
+  <h2>Recent jobs</h2>
+  <ul>
+    {% for job in recent %}
+      <li>{{ job.created_at|date:"M j, Y, P" }}: {{ job.dataset_id }}, {{ job.status }}, {{ job.accepted }} accepted, {{ job.quarantined }} set aside{% if job.error %} ({{ job.error }}){% endif %}</li>
+    {% empty %}
+      <li>No jobs yet.</li>
+    {% endfor %}
+  </ul>
+
+  <script type="module">
+    import { startIngest, watchJob, cancelJob } from "{% static 'prefkit/ingest.js' %}";
+
+    const ACTIVE_URL = "{% url 'prefkit:active-job' %}";
+    const buttons = [...document.querySelectorAll("button.start")];
+    const panel = document.getElementById("progress");
+    const cancelButton = document.getElementById("cancel"); // absent for users who are not administrators
+
+    let stopWatching = null;
+    let watchedJobId = null;
+
+    function setBusy(busy) {
+      buttons.forEach((button) => (button.disabled = busy));
+      if (cancelButton) cancelButton.hidden = !busy;
+    }
+
+    // Follow the running job's progress. Runs once per job, however many times sync() is called.
+    function watch(active) {
+      if (watchedJobId === active.job_id) return;
+      stopWatching?.();
+      watchedJobId = active.job_id;
+      if (cancelButton) {
+        cancelButton.dataset.url = active.cancel_url;
+        cancelButton.disabled = false;
+      }
+      stopWatching = watchJob(active.status_url, {
+        onUpdate(job) {
+          const live = job.live ?? { accepted: job.accepted, quarantined: job.quarantined };
+          panel.textContent = `${active.dataset}: ${job.status}, ${live.accepted} accepted, ${live.quarantined} set aside`;
+          if (job.error) panel.textContent += ` (${job.error})`;
+        },
+        onError: (err) => (panel.textContent = `Connection problem, retrying: ${err.message}`),
+      });
+    }
+
+    // Ask the server what is running. This works whether this tab or another tab started the import.
+    async function sync() {
+      try {
+        const res = await fetch(ACTIVE_URL, { credentials: "same-origin", headers: { Accept: "application/json" } });
+        const { active } = await res.json();
+        if (!active) {
+          stopWatching?.();
+          watchedJobId = null;
+          setBusy(false);
+          return;
+        }
+        setBusy(true);
+        watch(active);
+      } catch (err) {
+        panel.textContent = `Connection problem, retrying: ${err.message}`;
+      }
+    }
+
+    buttons.forEach((button) =>
+      button.addEventListener("click", async () => {
+        setBusy(true);
+        panel.textContent = `Starting ${button.dataset.name}...`;
+        try {
+          await startIngest(button.dataset.url);
+        } catch (err) {
+          panel.textContent = err.message; // for example, another import is still running
+        }
+        sync();
+      })
+    );
+
+    cancelButton?.addEventListener("click", async () => {
+      cancelButton.disabled = true;
+      try {
+        await cancelJob(cancelButton.dataset.url);
+        panel.textContent = "Cancel requested. The import stops at its next check, and nothing it saved is kept.";
+      } catch (err) {
+        cancelButton.disabled = false;
+        panel.textContent = err.message;
+      }
+    });
+
+    sync();
+    setInterval(sync, 1500);
+  </script>
+</body>
+</html>

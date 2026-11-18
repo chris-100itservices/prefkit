@@ -8,7 +8,13 @@ the defaults give you SQLite, in-process (eager) Celery and no Redis, so
 import os
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Read the project's .env file, if it exists. Values already set in the operating
+# system's environment win, so a variable set in the terminal still overrides the file.
+load_dotenv(BASE_DIR / ".env")
 
 
 def env(name: str, default: str | None = None) -> str | None:
@@ -42,6 +48,9 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    # Every page needs a signed-in user, unless the view is marked as open. Must come after
+    # AuthenticationMiddleware, which works out who is signed in.
+    "django.contrib.auth.middleware.LoginRequiredMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
 ]
 
@@ -95,7 +104,44 @@ LANGUAGE_CODE = "en-us"
 TIME_ZONE = "UTC"
 USE_TZ = True
 
+# Static files: the page's JavaScript and styles. STATIC_URL is relative, so Django puts the
+# site's URL prefix in front of it. `python manage.py collectstatic` copies every static file
+# into STATIC_ROOT, where a web server such as nginx can serve them directly.
 STATIC_URL = "static/"
+STATIC_ROOT = BASE_DIR / "var" / "static"
+
+# Where the sign-in page is. A URL name, not a path, so it follows the URL prefix below.
+LOGIN_URL = "login"
+
+# ---------------------------------------------------------------- running behind a web server
+#
+# These are only needed on a server where nginx (or another web server) receives the public
+# connections and passes them to prefkit. See section 9.6 of the manual.
+
+# The subfolder of the site where prefkit lives, for example /tests/prefkit. Django adds it
+# to every link it makes. The web server must remove it before passing a request on.
+PREFKIT_URL_PREFIX = (env("PREFKIT_URL_PREFIX", "") or "").rstrip("/")
+if PREFKIT_URL_PREFIX:
+    FORCE_SCRIPT_NAME = PREFKIT_URL_PREFIX
+
+# Sites allowed to send forms to prefkit over HTTPS, for example https://example.com.
+# Without it, Django refuses form posts that arrive through the web server.
+CSRF_TRUSTED_ORIGINS = [o.strip() for o in (env("PREFKIT_CSRF_ORIGINS", "") or "").split(",") if o.strip()]
+
+# When the web server handles HTTPS, it passes plain HTTP to prefkit and says so in the
+# X-Forwarded-Proto header. Trust that header only when a web server is in front, because
+# anyone can send it to an app that is reachable directly.
+PREFKIT_BEHIND_PROXY = env_bool("PREFKIT_BEHIND_PROXY", False)
+if PREFKIT_BEHIND_PROXY:
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    # Send the sign-in and form cookies over HTTPS only, so they cannot be read in transit.
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+
+# Keep prefkit's cookies inside its own subfolder, so they never mix with the cookies of
+# another site on the same domain, such as WordPress.
+SESSION_COOKIE_PATH = f"{PREFKIT_URL_PREFIX}/"
+CSRF_COOKIE_PATH = f"{PREFKIT_URL_PREFIX}/"
 
 # Celery. With PREFKIT_EAGER=1 (the default), tasks run inside the calling process,
 # so a breakpoint in an ingest is hit in VS Code without starting a worker.
@@ -109,7 +155,7 @@ CELERY_TASK_ROUTES = {"prefkit.ingest_dataset": {"queue": "ingest"}}
 
 # Compute: auto | cuda | mps | cpu. Read by prefkit.compute.devices.
 PREFKIT_DEVICE = env("PREFKIT_DEVICE", "auto")
-PREFKIT_JUDGE_MODEL = env("PREFKIT_JUDGE_MODEL", "Qwen/Qwen2.5-3B-Instruct")
+PREFKIT_JUDGE_MODEL = env("PREFKIT_JUDGE_MODEL", "Qwen/Qwen2.5-7B-Instruct")
 PREFKIT_LOG_LEVEL = env("PREFKIT_LOG_LEVEL", "INFO")
 
 LOGGING = {

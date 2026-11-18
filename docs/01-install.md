@@ -7,6 +7,25 @@ order: 1
 
 This takes about ten minutes on a machine with Python 3.11 or newer.
 
+To be able to use local GPU's install PyTorch:
+NVidia:
+python -m pip install torch --index-url https://download.pytorch.org/whl/cu128
+python -m pip install -r requirements-gpu.txt
+
+Test:
+python -c "import torch; print(torch.**version**, torch.cuda.is_available())"
+python manage.py devices
+
+Apple Silicon (M1, M2, M3, M4 and later):
+python3.12 -m venv .venv
+source .venv/bin/activate
+python -m pip install torch
+python -m pip install -r requirements-gpu.txt
+
+Test:
+python -c "import torch; print(torch.**version**, torch.backends.mps.is_available())"
+python manage.py devices
+
 ## 1. Create a virtual environment
 
 A **virtual environment** is an isolated folder of Python packages for this project,
@@ -35,6 +54,14 @@ They are generated from the models in `prefkit/models.py`:
 ```bash
 python manage.py makemigrations prefkit
 python manage.py migrate
+```
+
+For the agreement check run:
+
+```bash
+python manage.py migrate
+python manage.py judge hh_helpful_local --limit 200
+python manage.py agreement hh_helpful_local
 ```
 
 Run `makemigrations` once after you clone the project. Run it again whenever you change
@@ -82,7 +109,7 @@ the quarantine limit to 10% for this reason.
 python manage.py runserver
 ```
 
-Visit <http://127.0.0.1:8000/datasets/demo_local/> and press **Ingest dataset**. The page
+Visit <http://127.0.0.1:8000/> and press **Ingest dataset for any dataset available**. The page
 polls the job status while it runs, and the progress text updates until the job finishes.
 
 ## Optional: a local GPU

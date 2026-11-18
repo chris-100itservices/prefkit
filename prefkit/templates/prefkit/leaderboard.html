@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>prefkit · leaderboard</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 16px; max-width: 900px; }
+    table { border-collapse: collapse; width: 100%; margin: 12px 0 20px; }
+    th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid #ddd; }
+    th { border-bottom: 2px solid #999; }
+    td.num, th.num { text-align: right; }
+    tr.me td { background: #eef7ee; font-weight: 600; }
+    .rules li { margin-bottom: 4px; }
+    .table-wrap { overflow-x: auto; }
+  </style>
+</head>
+<body>
+  <p><a href="{% url 'prefkit:index' %}">Back to datasets</a></p>
+  <h1>Leaderboard</h1>
+
+  {% if scores %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th class="num">Rank</th><th>Name</th><th class="num">Points</th><th>Level</th>
+            <th class="num">Labels</th><th class="num">Known answers right</th><th class="num">Accuracy counted</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for s in scores %}
+            <tr{% if s.annotator == me %} class="me"{% endif %}>
+              <td class="num">{{ forloop.counter }}</td>
+              <td>{{ s.annotator }}</td>
+              <td class="num">{{ s.points }}</td>
+              <td>{{ s.level }}</td>
+              <td class="num">{{ s.labels }}</td>
+              <td class="num">{{ s.known_right }} of {{ s.known_total }}</td>
+              <td class="num">{% widthratio s.accuracy 1 100 %}%</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p>Nobody has labelled any rows yet.</p>
+  {% endif %}
+
+  <h2>How points work</h2>
+  <ul class="rules">
+    <li>Each label earns up to {{ points_per_label }} points.</li>
+    <li>That number is multiplied by your accuracy on rows whose correct answer is known. Some of those rows are mixed into your queue without telling you which ones. So careful labels earn more points than fast ones.</li>
+    <li>The accuracy counted is a careful estimate: the lowest accuracy your results so far can reasonably mean. With few known answers it starts low, and it rises as more of your answers prove right.</li>
+    <li>A label given in under {{ min_seconds }} seconds earns no points, because there was no time to read both answers.</li>
+    <li>Your points are worked out again from all your labels each time, so they go down if your accuracy goes down.</li>
+  </ul>
+  <p>Levels: {% for needed, name in levels %}{{ name }} from {{ needed }} points{% if not forloop.last %}, {% endif %}{% endfor %}.</p>
+</body>
+</html>

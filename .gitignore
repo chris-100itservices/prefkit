@@ -10,3 +10,8 @@ build/
 data/hh-rlhf/
 docs/.~lock*
 docs/prefkit-project.zip
+
+# Draft manuals and a temporary sandbox check: kept locally, not published.
+docs/prefkit-documentation-*.docx
+docs/prefkit-manual-plain-language.docx
+check_sandbox.py

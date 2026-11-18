@@ -1,17 +1,26 @@
 """End-to-end ingest through the job pipeline. Uses the real database, run eagerly."""
 
 import json
+import re
 from pathlib import Path
 
 import pytest
 from django.urls import reverse
 
 from prefkit import models as db
-from prefkit.jobs import tasks
+from prefkit.jobs import progress, tasks
 from prefkit.jobs.tasks import ingest_dataset
 
 # on_commit callbacks only run on real commits, so these tests use transaction mode.
 pytestmark = pytest.mark.django_db(transaction=True)
+
+
+@pytest.fixture
+def client(client, django_user_model):
+    """In this file, the browser is signed in as an administrator, who may import."""
+    admin = django_user_model.objects.create_user(username="admin", password="x" * 10, is_staff=True)
+    client.force_login(admin)
+    return client
 
 
 @pytest.fixture
@@ -134,3 +143,82 @@ def test_shipped_demo_dataset_ingests_with_quarantine(client):
     assert job.status == db.IngestJob.Status.SUCCEEDED
     assert job.accepted == 12
     assert job.quarantined == 1
+
+
+def test_second_dataset_is_refused_while_one_is_running(client, demo_dataset, manifest_dir):
+    """Only one import at a time, even across different datasets."""
+    write_dataset(manifest_dir, "other", [hh(i) for i in range(5)])
+    db.Dataset.objects.create(name="other", manifest_version=1)
+    db.IngestJob.objects.create(dataset=demo_dataset, status=db.IngestJob.Status.RUNNING)
+
+    response = client.post(reverse("prefkit:start-ingest", args=["other"]))
+
+    assert response.status_code == 409
+    assert "another import is still running" in response.json()["error"]
+
+
+def test_active_endpoint_reports_the_running_import(client, demo_dataset):
+    assert client.get(reverse("prefkit:active-job")).json() == {"active": None}
+
+    job = db.IngestJob.objects.create(dataset=demo_dataset, status=db.IngestJob.Status.RUNNING)
+
+    active = client.get(reverse("prefkit:active-job")).json()["active"]
+    assert active["job_id"] == str(job.pk)
+    assert active["dataset"] == "demo"
+
+
+def test_cancel_before_start_marks_job_cancelled_and_saves_nothing(demo_dataset):
+    job = db.IngestJob.objects.create(dataset=demo_dataset)
+    progress.request_cancel(job.pk)
+
+    ingest_dataset.apply(args=[str(job.pk)], throw=True)
+
+    job.refresh_from_db()
+    assert job.status == db.IngestJob.Status.CANCELLED
+    assert db.Comparison.objects.count() == 0
+    assert not progress.cancel_requested(job.pk)  # the flag is cleared once the job ends
+
+
+def test_cancel_during_run_rolls_back_everything(demo_dataset, monkeypatch):
+    """A cancel seen mid-run leaves no rows behind, because the transaction is rolled back."""
+    monkeypatch.setattr(tasks, "CANCEL_CHECK_EVERY", 10)
+    real_cancel_requested = progress.cancel_requested
+    calls = {"n": 0}
+
+    def cancel_on_second_check(job_id):
+        calls["n"] += 1
+        return calls["n"] >= 2 or real_cancel_requested(job_id)
+
+    monkeypatch.setattr(progress, "cancel_requested", cancel_on_second_check)
+    job = db.IngestJob.objects.create(dataset=demo_dataset)
+
+    ingest_dataset.apply(args=[str(job.pk)], throw=True)
+
+    job.refresh_from_db()
+    assert job.status == db.IngestJob.Status.CANCELLED
+    assert db.Comparison.objects.count() == 0
+
+
+def test_cancel_endpoint_refuses_when_nothing_is_running(client, demo_dataset):
+    job = db.IngestJob.objects.create(dataset=demo_dataset, status=db.IngestJob.Status.SUCCEEDED)
+
+    response = client.post(reverse("prefkit:cancel-job", args=[job.pk]))
+
+    assert response.status_code == 409
+
+
+def test_cancel_endpoint_sets_the_flag_for_a_running_job(client, demo_dataset):
+    job = db.IngestJob.objects.create(dataset=demo_dataset, status=db.IngestJob.Status.RUNNING)
+
+    response = client.post(reverse("prefkit:cancel-job", args=[job.pk]))
+
+    assert response.status_code == 202
+    assert progress.cancel_requested(job.pk)
+
+
+def test_one_page_lists_every_dataset(client, demo_dataset):
+    response = client.get(reverse("prefkit:index"))
+
+    assert response.status_code == 200
+    button = re.search(rb'<button[^>]*data-name="demo"[^>]*>', response.content).group(0)
+    assert b"disabled" not in button  # nothing is running, so the button is not greyed out

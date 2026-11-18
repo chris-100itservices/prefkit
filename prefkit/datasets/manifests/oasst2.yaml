@@ -2,6 +2,9 @@
 # prompt form one pair, and rank 0 is treated as the best reply.
 name: oasst2
 version: 1
+title: "OpenAssistant Conversations 2 (oasst2)"
+description: >-
+  Conversations written and ranked by volunteers. The two best-ranked replies to each message form one pair. Loads the whole file into memory.
 
 source:
   type: oasst_tree

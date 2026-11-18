@@ -25,8 +25,16 @@ from prefkit.jobs.writer import BatchWriter
 
 MANIFEST_DIR = Path(__file__).resolve().parents[1] / "datasets" / "manifests"
 MAX_ERROR_CHARS = 4000
+# How many rows pass between checks for a cancel request. Each check is a cache read,
+# so checking every row would be wasteful; 500 rows is well under a second of work.
+CANCEL_CHECK_EVERY = 500
+CANCELLED_MESSAGE = "Cancelled by the user. Nothing was saved."
 
 JobBody = Callable[[Any, db.IngestJob], IngestRun]
+
+
+class JobCancelled(Exception):
+    """Raised inside the import when the user has asked it to stop."""
 
 
 def tracked_job(fn: JobBody) -> Callable[[Any, str], None]:
@@ -45,6 +53,10 @@ def tracked_job(fn: JobBody) -> Callable[[Any, str], None]:
         job = db.IngestJob.objects.select_related("dataset").get(pk=job_id)
         if job.status == db.IngestJob.Status.SUCCEEDED:
             return  # redelivered after success: do nothing
+        if progress.cancel_requested(job.pk):
+            # Cancelled while still queued, before any work started.
+            _finish(job, db.IngestJob.Status.CANCELLED, error=CANCELLED_MESSAGE)
+            return
 
         db.IngestJob.objects.filter(pk=job.pk).update(
             status=db.IngestJob.Status.RUNNING,
@@ -58,6 +70,10 @@ def tracked_job(fn: JobBody) -> Callable[[Any, str], None]:
             raise
         except AbortIngest as exc:
             _finish(job, db.IngestJob.Status.FAILED, error=str(exc))
+            return
+        except JobCancelled:
+            # The transaction has rolled back, so no rows from this run were kept.
+            _finish(job, db.IngestJob.Status.CANCELLED, error=CANCELLED_MESSAGE)
             return
         except Exception as exc:
             _finish(job, db.IngestJob.Status.FAILED, error=f"{type(exc).__name__}: {exc}")
@@ -84,6 +100,7 @@ def _finish(job: db.IngestJob, status: str, **fields: Any) -> None:
         finished_at=timezone.now(),
         **fields,
     )
+    progress.clear_cancel(job.pk)
 
 
 @shared_task(
@@ -112,8 +129,10 @@ def ingest_dataset(task: Any, job: db.IngestJob) -> IngestRun:
     # transaction, so it can show counts that later roll back; the job status is the
     # source of truth.
     with transaction.atomic():
-        for mapped in run.run(read_rows(manifest)):
+        for count, mapped in enumerate(run.run(read_rows(manifest)), start=1):
             writer.add(mapped)
+            if count % CANCEL_CHECK_EVERY == 0 and progress.cancel_requested(job.pk):
+                raise JobCancelled()  # leaves the transaction, which rolls everything back
         writer.flush()
 
     return run

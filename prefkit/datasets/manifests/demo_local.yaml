@@ -2,6 +2,9 @@
 # It has one deliberately broken row, so you can watch quarantine work in a debugger.
 name: demo_local
 version: 1
+title: "Demo dataset"
+description: >-
+  13 example rows shipped with Prefkit. One row is broken on purpose, to show how broken rows are set aside. Works without internet.
 
 source:
   type: local

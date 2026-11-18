@@ -1,23 +1,25 @@
-# HH-RLHF, helpfulness subset, read from the local download.
-# Same mapping as hh_rlhf; only the source differs.
+# HH-RLHF, helpful-base subset, read from a local compressed copy.
+# Run `hf download Anthropic/hh-rlhf --repo-type dataset --local-dir data\hh-rlhf` first.
+# Each row has "chosen" and "rejected": two full conversations that share leading turns.
 name: hh_helpful_local
 version: 1
+title: "Anthropic HH-RLHF, helpful-base (local copy)"
+description: >-
+  The helpful part of Anthropic's Helpful and Harmless dataset, read from your downloaded copy in data/hh-rlhf. People chose the better of two assistant conversations.
 
 source:
   type: local
   location: data/hh-rlhf/helpful-base/train.jsonl.gz
 
 card: https://huggingface.co/datasets/Anthropic/hh-rlhf
-license: mit # confirm on the dataset card before relying on it
+license: mit
 
 mapping:
   prompt_strategy: common_prefix
   response_a_field: chosen
   response_b_field: rejected
-  winner_fixed: a
+  winner_fixed: a          # "chosen" is always the preferred response
   shuffle_positions: true
 
 gold:
   kind: none
-
-max_quarantine_rate: 0.01

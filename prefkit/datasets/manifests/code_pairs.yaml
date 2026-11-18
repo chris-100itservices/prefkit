@@ -4,6 +4,10 @@
 # clear "file not found" error, which is the intended behaviour for a template.
 name: code_pairs
 version: 1
+title: "Code pairs (template)"
+description: >-
+  A template for your own code answer pairs, read from data/code_pairs.jsonl. That file is not included, so importing fails until you add one.
+optional: true
 
 source:
   type: local

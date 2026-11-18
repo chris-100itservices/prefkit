@@ -10,12 +10,12 @@ Registered with @source_reader, so a manifest selects one with source.type.
 from __future__ import annotations
 
 import logging
-import subprocess
-import sys
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Iterator, Mapping
+from dataclasses import dataclass
 from typing import Any
 
+from prefkit import sandbox
 from prefkit.datasets.ingest import source_reader
 from prefkit.datasets.manifest import Manifest
 
@@ -51,17 +51,12 @@ ULTRAFEEDBACK_DIMENSION = "helpfulness"
 
 
 def _passes(program: str) -> bool:
-    """Run one Python program in a separate, isolated process. True when it exits cleanly."""
-    try:
-        result = subprocess.run(
-            [sys.executable, "-I", "-c", program],
-            capture_output=True,
-            timeout=TEST_TIMEOUT_SECONDS,
-            check=False,
-        )
-    except subprocess.TimeoutExpired:
-        return False
-    return result.returncode == 0
+    """Run one program in the Docker sandbox. True when it exits cleanly within the time limit.
+
+    Dataset code never runs directly on this computer. If Docker is missing or not running,
+    sandbox.SandboxUnavailable is raised, and the import stops with that message.
+    """
+    return sandbox.passes(program, timeout_s=TEST_TIMEOUT_SECONDS)
 
 
 def _mutants(code: str) -> Iterator[str]:
@@ -80,8 +75,22 @@ def _wrong_version(code: str, program_for: Callable[[str], str]) -> str | None:
     return None
 
 
-def humaneval_pairs(rows: Iterable[Mapping[str, Any]]) -> Iterator[dict[str, str]]:
-    """Pair each HumanEval solution (passes its tests) with a broken variant of it."""
+@dataclass(frozen=True)
+class CodeTask:
+    """One coding problem: its prompt, its known-good solution, and how to test any solution.
+
+    program_for(code) returns a complete Python program that runs `code` against the
+    problem's tests. The program exits with code 0 when the tests pass.
+    """
+
+    task_id: str
+    prompt: str
+    solution: str
+    program_for: Callable[[str], str]
+
+
+def humaneval_tasks(rows: Iterable[Mapping[str, Any]]) -> Iterator[CodeTask]:
+    """Turn HumanEval rows into CodeTasks. The tests call check(<function name>)."""
     for row in rows:
         header = row["prompt"]
         tests = f"\n\n{row['test']}\n\ncheck({row['entry_point']})\n"
@@ -89,18 +98,11 @@ def humaneval_pairs(rows: Iterable[Mapping[str, Any]]) -> Iterator[dict[str, str
         def program_for(body: str, header: str = header, tests: str = tests) -> str:
             return header + body + tests
 
-        if not _passes(program_for(row["canonical_solution"])):
-            log.info("%s skipped: its own solution fails the tests", row["task_id"])
-            continue
-        broken = _wrong_version(row["canonical_solution"], program_for)
-        if broken is None:
-            log.info("%s skipped: no small edit makes its tests fail", row["task_id"])
-            continue
-        yield {"prompt": header, "reply_a": row["canonical_solution"], "reply_b": broken}
+        yield CodeTask(str(row["task_id"]), header, row["canonical_solution"], program_for)
 
 
-def mbpp_pairs(rows: Iterable[Mapping[str, Any]]) -> Iterator[dict[str, str]]:
-    """Pair each MBPP solution (passes its tests) with a broken variant of it."""
+def mbpp_tasks(rows: Iterable[Mapping[str, Any]]) -> Iterator[CodeTask]:
+    """Turn MBPP rows into CodeTasks. The tests are a list of assert lines."""
     for row in rows:
         setup = row.get("test_setup_code") or ""
         asserts = "\n".join(row["test_list"])
@@ -108,14 +110,30 @@ def mbpp_pairs(rows: Iterable[Mapping[str, Any]]) -> Iterator[dict[str, str]]:
         def program_for(code: str, setup: str = setup, asserts: str = asserts) -> str:
             return f"{setup}\n{code}\n{asserts}\n"
 
-        if not _passes(program_for(row["code"])):
-            log.info("%s skipped: its own solution fails the tests", row["task_id"])
+        yield CodeTask(str(row["task_id"]), row["text"], row["code"], program_for)
+
+
+def _code_pairs(tasks: Iterable[CodeTask]) -> Iterator[dict[str, str]]:
+    """Pair each solution that passes its tests with a broken variant of it."""
+    for task in tasks:
+        if not _passes(task.program_for(task.solution)):
+            log.info("%s skipped: its own solution fails the tests", task.task_id)
             continue
-        broken = _wrong_version(row["code"], program_for)
+        broken = _wrong_version(task.solution, task.program_for)
         if broken is None:
-            log.info("%s skipped: no small edit makes its tests fail", row["task_id"])
+            log.info("%s skipped: no small edit makes its tests fail", task.task_id)
             continue
-        yield {"prompt": row["text"], "reply_a": row["code"], "reply_b": broken}
+        yield {"prompt": task.prompt, "reply_a": task.solution, "reply_b": broken}
+
+
+def humaneval_pairs(rows: Iterable[Mapping[str, Any]]) -> Iterator[dict[str, str]]:
+    """Pair each HumanEval solution (passes its tests) with a broken variant of it."""
+    return _code_pairs(humaneval_tasks(rows))
+
+
+def mbpp_pairs(rows: Iterable[Mapping[str, Any]]) -> Iterator[dict[str, str]]:
+    """Pair each MBPP solution (passes its tests) with a broken variant of it."""
+    return _code_pairs(mbpp_tasks(rows))
 
 
 # ------------------------------------------------------ conversation datasets
@@ -196,6 +214,14 @@ def _read_humaneval(manifest: Manifest) -> Iterable[Mapping[str, Any]]:
 def _read_mbpp(manifest: Manifest) -> Iterable[Mapping[str, Any]]:
     # MBPP has two configurations. "full" holds all problems.
     return mbpp_pairs(_hub_rows(manifest, config="full"))
+
+
+# The code datasets as CodeTasks, keyed by the manifest's source.type. The measure_code
+# command uses these to rebuild each problem's tests from the same source as the import.
+CODE_TASK_READERS: dict[str, Callable[[Manifest], Iterable[CodeTask]]] = {
+    "humaneval_mutants": lambda manifest: humaneval_tasks(_hub_rows(manifest)),
+    "mbpp_mutants": lambda manifest: mbpp_tasks(_hub_rows(manifest, config="full")),
+}
 
 
 @source_reader("oasst_tree")

@@ -275,10 +275,17 @@ def _show_b_first(row_bytes: bytes, enabled: bool) -> bool:
 
 
 def _is_gold(row: Mapping[str, Any], manifest: Manifest) -> bool:
+    """A row is gold when its correct answer is known for certain.
+
+    Two ways a row becomes gold:
+      - judged_by is "execution": unit tests chose the winner, so it is correct by construction.
+      - gold.kind is "field": a column in the source marks the row as gold.
+    """
+    if manifest.judged_by == "execution":
+        return True
     policy = manifest.gold
     if policy.kind == "field":
         return bool(row.get(policy.field))
-    # "execution" is decided later by running the tests in a sandbox.
     return False
 
 

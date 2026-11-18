@@ -8,19 +8,29 @@ function csrfToken() {
   return match ? decodeURIComponent(match[1]) : "";
 }
 
-/** POST to start an ingest. Resolves to { job_id, status_url }; rejects with a readable message. */
-export async function startIngest(url, { signal } = {}) {
+/** POST to a prefkit API address. Resolves to the JSON body; rejects with a readable message. */
+async function postJson(url) {
   const response = await fetch(url, {
     method: "POST",
     credentials: "same-origin",
     headers: { "X-CSRFToken": csrfToken(), Accept: "application/json" },
-    signal,
   });
-  const body = await response.json();
+  // Error replies are JSON too, but fall back to an empty object if the body is not JSON.
+  const body = await response.json().catch(() => ({}));
   if (!response.ok) {
     throw new Error(body.error ?? `HTTP ${response.status}`);
   }
   return body;
+}
+
+/** Start an ingest. Resolves to { job_id, status_url }; a 409 rejects with the server's message. */
+export function startIngest(url) {
+  return postJson(url);
+}
+
+/** Ask a running import to stop. Resolves once the server has recorded the request. */
+export function cancelJob(url) {
+  return postJson(url);
 }
 
 /**

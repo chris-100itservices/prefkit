@@ -3,6 +3,9 @@
 # The adapter extracts the shared turns as the prompt.
 name: hh_rlhf
 version: 1
+title: "Anthropic HH-RLHF (Helpful and Harmless)"
+description: >-
+  About 160,000 pairs of assistant conversations from the Hugging Face Hub. People chose the more helpful and less harmful one. Downloaded the first time.
 
 source:
   type: hf

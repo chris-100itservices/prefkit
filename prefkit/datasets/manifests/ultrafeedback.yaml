@@ -2,6 +2,9 @@
 # is paired with the lowest-rated one, on the helpfulness rating.
 name: ultrafeedback
 version: 1
+title: "UltraFeedback"
+description: >-
+  Prompts with four model answers each, rated by GPT-4. The best- and worst-rated answers form one pair, so the winner comes from a model, not a person.
 
 source:
   type: ultrafeedback_best_worst

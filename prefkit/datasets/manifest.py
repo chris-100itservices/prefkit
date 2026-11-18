@@ -114,6 +114,13 @@ class Manifest(StrictModel):
     # a lowercase identifier and must match the file name.
     name: str = Field(pattern=r"^[a-z][a-z0-9_]*$")
     version: int = Field(ge=1)
+    # Optional. Shown when the pointer rests on the dataset's buttons on the web page:
+    # the dataset's full name, and one or two sentences on what it contains.
+    title: str = ""
+    description: str = ""
+    # Optional datasets are listed last on the web page and marked "optional", for example a
+    # template that needs your own data file before it can be imported.
+    optional: bool = False
     source: SourceSpec
     card: str = Field(pattern=r"^https://")  # dataset card: provenance and intended use
     license: str = Field(min_length=1)

@@ -2,6 +2,9 @@
 # a broken variant of itself, as in humaneval.yaml. Uses the "full" configuration.
 name: mbpp
 version: 1
+title: "Google MBPP (Mostly Basic Python Problems)"
+description: >-
+  Short Python problems with three test lines each. Each correct solution is paired with a slightly broken version, as in HumanEval. Needs Docker.
 
 source:
   type: mbpp_mutants

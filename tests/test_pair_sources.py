@@ -1,11 +1,19 @@
 """Pair builders for datasets that are not stored as preference pairs.
 
-The mutant builders run each program in a separate Python process, so these tests
-execute small real programs. They need no internet access.
+The mutant builders run each program in the Docker sandbox. These tests replace the
+sandbox with a stand-in that runs the small programs below in a separate Python process,
+so they need neither Docker nor internet access. That is safe only because these programs
+are written here; dataset code always goes through the real sandbox.
 """
 
+import subprocess
+import sys
 from pathlib import Path
 
+import pytest
+
+from prefkit import sandbox
+from prefkit.datasets import pair_sources
 from prefkit.datasets.ingest import map_row
 from prefkit.datasets.manifest import load_manifest
 from prefkit.datasets.pair_sources import (
@@ -14,6 +22,21 @@ from prefkit.datasets.pair_sources import (
     oasst_pairs,
     ultrafeedback_pairs,
 )
+
+
+def _run_here(program: str, timeout_s: int = 10) -> bool:
+    """Stand-in for sandbox.passes, for the test programs in this file only."""
+    try:
+        done = subprocess.run([sys.executable, "-I", "-c", program], capture_output=True, timeout=timeout_s)
+    except subprocess.TimeoutExpired:
+        return False
+    return done.returncode == 0
+
+
+@pytest.fixture(autouse=True)
+def stand_in_sandbox(monkeypatch):
+    monkeypatch.setattr(sandbox, "passes", _run_here)
+
 
 ADD_HEADER = 'def add(a, b):\n    """Return the sum of a and b."""\n'
 
@@ -175,3 +198,25 @@ def test_identical_transcripts_are_reported_as_no_preference():
         assert str(exc) == "chosen and rejected are identical, so there is no preference"
     else:
         raise AssertionError("identical transcripts were not rejected")
+
+
+def test_import_stops_when_docker_is_not_available(monkeypatch):
+    """Without Docker, the import must stop, never run the code directly."""
+
+    def no_docker(program, timeout_s=10):
+        raise sandbox.SandboxUnavailable("Docker is not installed.")
+
+    monkeypatch.setattr(sandbox, "passes", no_docker)
+    row = {
+        "task_id": "t/0",
+        "prompt": ADD_HEADER,
+        "canonical_solution": "    return a + b\n",
+        "test": "def check(candidate):\n    assert candidate(1, 2) == 3\n",
+        "entry_point": "add",
+    }
+    with pytest.raises(sandbox.SandboxUnavailable):
+        list(humaneval_pairs([row]))
+
+
+def test_the_import_uses_the_sandbox():
+    assert pair_sources._passes.__doc__ and "sandbox" in pair_sources._passes.__doc__

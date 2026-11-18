@@ -2,6 +2,9 @@
 # variant of itself. The correct one passes the tests and the broken one does not.
 name: humaneval
 version: 1
+title: "OpenAI HumanEval"
+description: >-
+  164 Python programming problems with unit tests. Each correct solution is paired with a slightly broken version, so the right answer is known. Needs Docker.
 
 source:
   type: humaneval_mutants

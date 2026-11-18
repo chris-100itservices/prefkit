@@ -1,0 +1,127 @@
+{% load static %}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>prefkit · label {{ dataset.name }}</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 16px; max-width: 1200px; }
+    pre { white-space: pre-wrap; word-break: break-word; background: #f4f4f4; padding: 8px; margin: 0; }
+    .answers { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 700px) { .answers { grid-template-columns: 1fr; } }
+    .choices button { font-size: 1.1em; padding: 8px 20px; margin-right: 8px; }
+    .account { display: flex; gap: 12px; align-items: center; }
+    .account form { margin: 0; }
+    .score { padding: 8px 12px; background: #eef7ee; border: 1px solid #b9dcbc; border-radius: 6px; }
+  </style>
+</head>
+<body>
+  <p><a href="{% url 'prefkit:index' %}">Back to datasets</a></p>
+  <div class="account">
+    <span>Signed in as <strong>{{ user.get_username }}</strong></span>
+    <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button type="submit">Sign out</button></form>
+  </div>
+  <h1>Label {{ dataset.name }}</h1>
+
+  {% if routed %}
+    <p>{{ routed }} rows of this dataset are routed to a person. Read the question and both answers, then choose the better answer. Choose Tie only if they are about equally good.</p>
+
+    <p class="score" id="score" aria-live="polite">Loading your score...</p>
+    <p><a href="{% url 'prefkit:leaderboard' %}">Leaderboard and how points work</a></p>
+
+    <p id="status" aria-live="polite">Loading the first row...</p>
+
+    <section id="row" hidden>
+      <h2>Question</h2>
+      <pre id="prompt"></pre>
+      <div class="answers">
+        <div><h2>Answer A</h2><pre id="a"></pre></div>
+        <div><h2>Answer B</h2><pre id="b"></pre></div>
+      </div>
+      <p class="choices">
+        <button type="button" data-choice="a">A is better</button>
+        <button type="button" data-choice="b">B is better</button>
+        <button type="button" data-choice="tie">Tie</button>
+      </p>
+    </section>
+  {% else %}
+    <p>No rows of this dataset are routed to a person yet. Run <code>python manage.py route {{ dataset.name }} --apply</code> first.</p>
+  {% endif %}
+
+  {% if routed %}
+  <script type="module">
+    const NEXT_URL = "{% url 'prefkit:label-next' dataset.name %}";
+
+    const status = document.getElementById("status");
+    const rowSection = document.getElementById("row");
+    const choiceButtons = [...document.querySelectorAll("[data-choice]")];
+
+    let current = null;   // the row on screen
+    let shownAt = 0;      // when it appeared, to measure how long the person took
+
+    function csrfToken() {
+      const match = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+      return match ? decodeURIComponent(match[1]) : "";
+    }
+
+    // The running totals. Never the result of a single row, so hidden checks stay hidden.
+    function showScore(score) {
+      if (!score) return;
+      const next = score.next_level ? ` ${score.to_next} more to ${score.next_level}.` : "";
+      document.getElementById("score").textContent =
+        `${score.points} points, level ${score.level}.${next} ` +
+        `Labels: ${score.labels}. Known answers right: ${score.known_right} of ${score.known_total}, ` +
+        `accuracy counted: ${score.accuracy}%.`;
+    }
+
+    async function loadNext() {
+      const res = await fetch(NEXT_URL, { credentials: "same-origin", headers: { Accept: "application/json" } });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
+      showScore(body.score);
+      if (body.done) {
+        current = null;
+        rowSection.hidden = true;
+        status.textContent = "Done. You have labelled every row routed to a person.";
+        return;
+      }
+      current = body;
+      document.getElementById("prompt").textContent = body.prompt;
+      document.getElementById("a").textContent = body.a;
+      document.getElementById("b").textContent = body.b;
+      rowSection.hidden = false;
+      status.textContent = `${body.remaining} rows left.`;
+      choiceButtons.forEach((button) => (button.disabled = false));
+      shownAt = performance.now();
+      window.scrollTo(0, 0);
+    }
+
+    async function save(choice) {
+      choiceButtons.forEach((button) => (button.disabled = true));
+      const res = await fetch(current.save_url, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json", "X-CSRFToken": csrfToken(), Accept: "application/json" },
+        body: JSON.stringify({ choice, seconds: (performance.now() - shownAt) / 1000 }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
+    }
+
+    choiceButtons.forEach((button) =>
+      button.addEventListener("click", async () => {
+        try {
+          await save(button.dataset.choice);
+          await loadNext();
+        } catch (err) {
+          status.textContent = err.message;
+          choiceButtons.forEach((b) => (b.disabled = false));
+        }
+      })
+    );
+
+    loadNext().catch((err) => (status.textContent = err.message));
+  </script>
+  {% endif %}
+</body>
+</html>

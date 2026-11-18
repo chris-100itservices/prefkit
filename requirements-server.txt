@@ -1,0 +1,6 @@
+# Extra packages for running prefkit on a Linux server. Install on top of requirements.txt:
+#   python -m pip install -r requirements.txt -r requirements-server.txt
+# gunicorn: the production web server. It runs on Linux and macOS, not on Windows.
+gunicorn>=22.0
+# psycopg: lets Django talk to PostgreSQL. Needed only with PREFKIT_DB=postgres.
+psycopg[binary]>=3.1
